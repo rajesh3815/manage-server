@@ -52,6 +52,7 @@ const getAlltodo = async (req, res) => {
 };
 
 const getAnalytics = async (req, res) => {
+  const { assignto } = req.query;
   const userId = req.userId;
   const analytics = {
     backlog: 0,
@@ -66,8 +67,10 @@ const getAnalytics = async (req, res) => {
 
   try {
     const tasks = await todo.find({ userId });
-
-    tasks.forEach((task) => {
+    const ass = await todo.find({ assignto });
+    const combinedResults = [...tasks, ...ass];
+    
+    combinedResults.forEach((task) => {
       // Counting priorities
       if (task.priority === "HIGH PRIORITY") {
         analytics.highPriority += 1;
@@ -131,64 +134,61 @@ const getTaskById = async (req, res) => {
     });
   }
 };
+
+
 const getFilterData = async (req, res) => {
   const { filterType, assignto } = req.query;
   const userId = req.userId;
-  
+
   if (!filterType) {
     return res.status(400).json({
       status: 0,
       message: "no filter",
     });
   }
+
   try {
     let filter = { userId };
     let assFilter = { assignto };
     const now = new Date();
-    const offset = 5.5 * 60 * 60 * 1000;
 
-    const startOfDayIST = new Date(now);
-    startOfDayIST.setUTCHours(0, 0, 0, 0);
-    startOfDayIST.setTime(startOfDayIST.getTime() + offset);
+    // Set start of today
+    const startOfDay = new Date(now);
+    startOfDay.setUTCHours(0, 0, 0, 0);
 
-    const endOfDayIST = new Date(startOfDayIST);
-    endOfDayIST.setDate(startOfDayIST.getDate() + 1);
+    //set end of the day
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(startOfDay.getDate() + 1);
 
-    const startOfWeekIST = new Date(startOfDayIST);
-    startOfWeekIST.setDate(
-      startOfWeekIST.getDate() - startOfWeekIST.getUTCDay()
-    );
+    // Set week filter
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - 7);
 
-    const endOfWeekIST = new Date(startOfWeekIST);
-    endOfWeekIST.setDate(startOfWeekIST.getDate() + 7);
-
-    const startOfMonthIST = new Date(now);
-    startOfMonthIST.setUTCDate(1);
-    startOfMonthIST.setUTCHours(0, 0, 0, 0);
-    startOfMonthIST.setTime(startOfMonthIST.getTime() + offset);
-
-    const endOfMonthIST = new Date(startOfMonthIST);
-    endOfMonthIST.setUTCMonth(startOfMonthIST.getUTCMonth() + 1);
-
+    // Set month filter
+    const startOfMonth = new Date(now);
+    startOfMonth.setDate(now.getDate() - 30);
+    
     switch (filterType) {
       case "Today":
-        filter.createdAt = { $gte: startOfDayIST, $lt: endOfDayIST };
-        assFilter.createdAt = { $gte: startOfDayIST, $lt: endOfDayIST };
+        filter.createdAt = { $gte: startOfDay, $lt: endOfDay };
+        assFilter.createdAt = { $gte: startOfDay, $lt: endOfDay };
         break;
       case "This week":
-        filter.createdAt = { $gte: startOfWeekIST, $lt: endOfWeekIST };
-        assFilter.createdAt = { $gte: startOfWeekIST, $lt: endOfWeekIST };
+        filter.createdAt = { $gte: startOfWeek, $lt: now };
+        assFilter.createdAt = { $gte: startOfWeek, $lt: now };
         break;
       case "This month":
-        filter.createdAt = { $gte: startOfMonthIST, $lt: endOfMonthIST };
-        assFilter.createdAt = { $gte: startOfMonthIST, $lt: endOfMonthIST };
+        filter.createdAt = { $gte: startOfMonth, $lt: now };
+        assFilter.createdAt = { $gte: startOfMonth, $lt: now };
         break;
       default:
-        break;
+        return res.status(400).json({
+          status: 0,
+          message: "Invalid filter type",
+        });
     }
-    // console.log(filter);
+
     const tasks = await todo.find(filter);
-    // console.log(assFilter);
     const ass = await todo.find(assFilter);
     const combinedResults = [...tasks, ...ass];
     res
@@ -254,9 +254,9 @@ const editCheck = async (req, res) => {
         message: "task not found ",
       });
     }
-   
+
     taskUpdate.tasks[idx].checked = !taskUpdate.tasks[idx].checked;
-    
+
     await taskUpdate.save();
     res.json({
       status: 1,
